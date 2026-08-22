@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  DOCTOR
+  RECEPTIONIST
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum QueueStatus {
+  WAITING
+  IN_CONSULTATION
+  COMPLETED
+  SKIPPED
+  CANCELLED
+}
+
+model User {
+  id String @id @default(cuid())
+  name String
+  email String @unique
+  passwordHash String
+  role Role
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  visits Visit[] @relation("DoctorVisits")
+  auditEvents AuditEvent[]
+}
+model Patient {
+  id String @id @default(cuid())
+  patientNumber String @unique
+  firstName String
+  lastName String
+  mobile String
+  email String?
+  dateOfBirth DateTime?
+  gender String?
+  address String?
+  allergies String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  appointments Appointment[]
+  queueEntries QueueEntry[]
+  visits Visit[]
+}
+model Appointment {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id])
+  startsAt DateTime
+  endsAt DateTime
+  status AppointmentStatus @default(SCHEDULED)
+  reason String?
+  createdAt DateTime @default(now())
+  queueEntry QueueEntry?
+  @@index([startsAt, endsAt])
+}
+model QueueEntry {
+  id String @id @default(cuid())
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id])
+  appointmentId String? @unique
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  date DateTime @db.Date
+  token Int
+  status QueueStatus @default(WAITING)
+  @@unique([date, token])
+}
+model Visit {
+  id String @id @default(cuid())
+  patientId String
+  doctorId String
+  patient Patient @relation(fields: [patientId], references: [id])
+  doctor User @relation("DoctorVisits", fields: [doctorId], references: [id])
+  chiefComplaint String?
+  diagnosis String?
+  clinicalNotes String?
+  systolic Int?
+  diastolic Int?
+  temperature Float?
+  weight Float?
+  advice String?
+  followUpAt DateTime?
+  createdAt DateTime @default(now())
+  prescription Prescription?
+}
+model Prescription {
+  id String @id @default(cuid())
+  visitId String @unique
+  visit Visit @relation(fields: [visitId], references: [id])
+  medicines PrescriptionMedicine[]
+}
+model Medicine {
+  id String @id @default(cuid())
+  name String @unique
+  strength String?
+  defaultInstructions String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+}
+model PrescriptionMedicine {
+  id String @id @default(cuid())
+  prescriptionId String
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicineId String?
+  name String
+  dosage String
+  frequency String
+  duration String
+  instructions String?
+  isFreeText Boolean @default(false)
+}
+model AuditEvent {
+  id String @id @default(cuid())
+  actorId String?
+  actor User? @relation(fields: [actorId], references: [id])
+  action String
+  entity String
+  entityId String
+  detail Json?
+  createdAt DateTime @default(now())
+  @@index([entity, entityId])
+}
