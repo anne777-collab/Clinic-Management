@@ -8,6 +8,134 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model User {
+  id           String       @id @default(cuid())
+  name         String
+  email        String       @unique
+  passwordHash String
+  role         Role
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  auditEvents  AuditEvent[]
+  visits       Visit[]      @relation("DoctorVisits")
+}
+
+model ClinicSettings {
+  id                 String   @id @default("default")
+  name               String   @default("Shiva Dental Clinic")
+  address            String?
+  phone              String?
+  email              String?
+  prescriptionFooter String?
+  updatedAt          DateTime @updatedAt
+}
+
+model Patient {
+  id            String        @id @default(cuid())
+  patientNumber String        @unique
+  firstName     String
+  lastName      String
+  mobile        String
+  email         String?
+  dateOfBirth   DateTime?
+  gender        String?
+  address       String?
+  allergies     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  appointments  Appointment[]
+  queueEntries  QueueEntry[]
+  visits        Visit[]
+}
+
+model Appointment {
+  id         String            @id @default(cuid())
+  patientId  String
+  startsAt   DateTime
+  endsAt     DateTime
+  status     AppointmentStatus @default(SCHEDULED)
+  reason     String?
+  createdAt  DateTime          @default(now())
+  patient    Patient           @relation(fields: [patientId], references: [id])
+  queueEntry QueueEntry?
+
+  @@index([startsAt, endsAt])
+}
+
+model QueueEntry {
+  id            String       @id @default(cuid())
+  patientId     String
+  appointmentId String?      @unique
+  date          DateTime     @db.Date
+  token         Int
+  status        QueueStatus  @default(WAITING)
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  patient       Patient      @relation(fields: [patientId], references: [id])
+
+  @@unique([date, token])
+}
+
+model Visit {
+  id             String        @id @default(cuid())
+  patientId      String
+  doctorId       String
+  chiefComplaint String?
+  diagnosis      String?
+  clinicalNotes  String?
+  systolic       Int?
+  diastolic      Int?
+  temperature    Float?
+  weight         Float?
+  advice         String?
+  followUpAt     DateTime?
+  createdAt      DateTime      @default(now())
+  prescription   Prescription?
+  doctor         User          @relation("DoctorVisits", fields: [doctorId], references: [id])
+  patient        Patient       @relation(fields: [patientId], references: [id])
+}
+
+model Prescription {
+  id        String                 @id @default(cuid())
+  visitId   String                 @unique
+  visit     Visit                  @relation(fields: [visitId], references: [id])
+  medicines PrescriptionMedicine[]
+}
+
+model Medicine {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  strength            String?
+  defaultInstructions String?
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+}
+
+model PrescriptionMedicine {
+  id             String       @id @default(cuid())
+  prescriptionId String
+  medicineId     String?
+  name           String
+  dosage         String
+  frequency      String
+  duration       String
+  instructions   String?
+  isFreeText     Boolean      @default(false)
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String
+  detail    Json?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+}
+
 enum Role {
   ADMIN
   DOCTOR
@@ -28,121 +156,4 @@ enum QueueStatus {
   COMPLETED
   SKIPPED
   CANCELLED
-}
-
-model User {
-  id String @id @default(cuid())
-  name String
-  email String @unique
-  passwordHash String
-  role Role
-  active Boolean @default(true)
-  createdAt DateTime @default(now())
-  visits Visit[] @relation("DoctorVisits")
-  auditEvents AuditEvent[]
-}
-
-model ClinicSettings {
-  id String @id @default("default")
-  name String @default("Shiva Dental Clinic")
-  address String?
-  phone String?
-  email String?
-  prescriptionFooter String?
-  updatedAt DateTime @updatedAt
-}
-model Patient {
-  id String @id @default(cuid())
-  patientNumber String @unique
-  firstName String
-  lastName String
-  mobile String
-  email String?
-  dateOfBirth DateTime?
-  gender String?
-  address String?
-  allergies String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  appointments Appointment[]
-  queueEntries QueueEntry[]
-  visits Visit[]
-}
-model Appointment {
-  id String @id @default(cuid())
-  patientId String
-  patient Patient @relation(fields: [patientId], references: [id])
-  startsAt DateTime
-  endsAt DateTime
-  status AppointmentStatus @default(SCHEDULED)
-  reason String?
-  createdAt DateTime @default(now())
-  queueEntry QueueEntry?
-  @@index([startsAt, endsAt])
-}
-model QueueEntry {
-  id String @id @default(cuid())
-  patientId String
-  patient Patient @relation(fields: [patientId], references: [id])
-  appointmentId String? @unique
-  appointment Appointment? @relation(fields: [appointmentId], references: [id])
-  date DateTime @db.Date
-  token Int
-  status QueueStatus @default(WAITING)
-  @@unique([date, token])
-}
-model Visit {
-  id String @id @default(cuid())
-  patientId String
-  doctorId String
-  patient Patient @relation(fields: [patientId], references: [id])
-  doctor User @relation("DoctorVisits", fields: [doctorId], references: [id])
-  chiefComplaint String?
-  diagnosis String?
-  clinicalNotes String?
-  systolic Int?
-  diastolic Int?
-  temperature Float?
-  weight Float?
-  advice String?
-  followUpAt DateTime?
-  createdAt DateTime @default(now())
-  prescription Prescription?
-}
-model Prescription {
-  id String @id @default(cuid())
-  visitId String @unique
-  visit Visit @relation(fields: [visitId], references: [id])
-  medicines PrescriptionMedicine[]
-}
-model Medicine {
-  id String @id @default(cuid())
-  name String @unique
-  strength String?
-  defaultInstructions String?
-  active Boolean @default(true)
-  createdAt DateTime @default(now())
-}
-model PrescriptionMedicine {
-  id String @id @default(cuid())
-  prescriptionId String
-  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
-  medicineId String?
-  name String
-  dosage String
-  frequency String
-  duration String
-  instructions String?
-  isFreeText Boolean @default(false)
-}
-model AuditEvent {
-  id String @id @default(cuid())
-  actorId String?
-  actor User? @relation(fields: [actorId], references: [id])
-  action String
-  entity String
-  entityId String
-  detail Json?
-  createdAt DateTime @default(now())
-  @@index([entity, entityId])
 }
