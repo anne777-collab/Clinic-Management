@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { createPatientAction } from "@/app/actions/clinic";
+import { useState, useTransition } from "react";
+import { createPatientAction, findDuplicatePatientsAction } from "@/app/actions/clinic";
 import { SubmitButton } from "@/components/submit-button";
 
 export default function NewPatientPage() {
   const [canSubmit, setCanSubmit] = useState(false);
+  const [duplicates, setDuplicates] = useState<{ id: string; firstName: string; lastName: string; patientNumber: string; dateOfBirth: Date | null }[]>([]);
+  const [checking, startChecking] = useTransition();
+  const checkMobile = (mobile: string) => startChecking(async () => setDuplicates(await findDuplicatePatientsAction(mobile)));
   return (
     <>
       <div className="mb-6">
@@ -44,6 +47,7 @@ export default function NewPatientPage() {
               <input
                 name={String(name)}
                 required={Boolean(required)}
+                onBlur={name === "mobile" ? (event) => checkMobile(event.currentTarget.value) : undefined}
                 type={
                   name === "dateOfBirth"
                     ? "date"
@@ -56,6 +60,7 @@ export default function NewPatientPage() {
             </label>
           ))}
         </div>
+        {(checking || duplicates.length > 0) && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm"><p className="font-bold text-amber-900">{checking ? "Checking for an existing patient…" : "Possible duplicate patient"}</p>{duplicates.map((patient) => <Link key={patient.id} href={`/patients/${patient.id}`} className="mt-2 block rounded-lg bg-white p-2 text-amber-900 hover:bg-amber-100"><b>{patient.firstName} {patient.lastName}</b> · {patient.patientNumber}{patient.dateOfBirth ? ` · DOB ${new Date(patient.dateOfBirth).toLocaleDateString()}` : ""}</Link>)}{duplicates.length > 0 && <p className="mt-2 text-xs text-amber-800">Review the existing record before creating a separate patient.</p>}</div>}
         <label className="block text-sm font-semibold">
           Address
           <textarea

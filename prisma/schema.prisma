@@ -41,6 +41,16 @@ model User {
   visits Visit[] @relation("DoctorVisits")
   auditEvents AuditEvent[]
 }
+
+model ClinicSettings {
+  id String @id @default("default")
+  name String @default("Shiva Dental Clinic")
+  address String?
+  phone String?
+  email String?
+  prescriptionFooter String?
+  updatedAt DateTime @updatedAt
+}
 model Patient {
   id String @id @default(cuid())
   patientNumber String @unique

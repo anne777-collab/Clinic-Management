@@ -20,6 +20,19 @@ export async function createPatientAction(formData: FormData) {
   await audit(user.id, "CREATE", "Patient", patient.id, { mobile: patient.mobile });
   redirect(`/patients/${patient.id}`);
 }
+export async function findDuplicatePatientsAction(mobile: string) {
+  const user = await requireUser(); assert(user.role, "patients:write");
+  const normalized = mobile.trim();
+  if (normalized.length < 8) return [];
+  return db.patient.findMany({ where: { mobile: normalized }, select: { id: true, firstName: true, lastName: true, patientNumber: true, dateOfBirth: true }, take: 5 });
+}
+export async function updatePatientAction(formData: FormData) {
+  const user = await requireUser(); assert(user.role, "patients:write");
+  const id = String(formData.get("id") ?? ""); const value = patientSchema.parse(Object.fromEntries(formData));
+  const patient = await db.patient.update({ where: { id }, data: { ...value, email: value.email || null } });
+  await audit(user.id, "UPDATE", "Patient", patient.id, { mobile: patient.mobile });
+  revalidatePath(`/patients/${patient.id}`); revalidatePath("/patients"); redirect(`/patients/${patient.id}?updated=1`);
+}
 export async function createAppointmentAction(formData: FormData) {
   const user = await requireUser(); assert(user.role, "appointments:write");
   const parsed = appointmentSchema.parse(Object.fromEntries(formData));
@@ -63,4 +76,32 @@ export async function createStaffAction(formData: FormData) {
   if (!name || !/^\S+@\S+\.\S+$/.test(email) || password.length < 12 || !Object.values(Role).includes(role)) throw new Error("Provide a name, valid email, 12-character password, and role.");
   const staff = await db.user.create({ data: { name, email, passwordHash: await bcrypt.hash(password, 12), role } });
   await audit(user.id, "CREATE", "User", staff.id, { role }); revalidatePath("/staff");
+}
+export async function updateStaffAction(formData: FormData) {
+  const user = await requireUser(); assert(user.role, "users:manage");
+  const id = String(formData.get("id") ?? ""); const action = String(formData.get("action") ?? "");
+  const staff = await db.user.findUniqueOrThrow({ where: { id } });
+  if (staff.id === user.id && action === "toggle") throw new Error("You cannot disable your own account.");
+  if (action === "toggle") {
+    await db.user.update({ where: { id }, data: { active: !staff.active } });
+    await audit(user.id, staff.active ? "DISABLE" : "ENABLE", "User", id);
+  } else if (action === "reset-password") {
+    const password = String(formData.get("password") ?? "");
+    if (password.length < 12) throw new Error("Password must be at least 12 characters.");
+    await db.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(password, 12) } });
+    await audit(user.id, "RESET_PASSWORD", "User", id);
+  } else if (action === "role") {
+    const role = String(formData.get("role") ?? "") as Role;
+    if (!Object.values(Role).includes(role)) throw new Error("Invalid role.");
+    await db.user.update({ where: { id }, data: { role } });
+    await audit(user.id, "UPDATE_ROLE", "User", id, { role });
+  }
+  revalidatePath("/staff");
+}
+export async function updateClinicSettingsAction(formData: FormData) {
+  const user = await requireUser(); assert(user.role, "clinic:manage");
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) throw new Error("Clinic name is required.");
+  const settings = await db.clinicSettings.upsert({ where: { id: "default" }, update: { name, address: String(formData.get("address") ?? "").trim() || null, phone: String(formData.get("phone") ?? "").trim() || null, email: String(formData.get("email") ?? "").trim() || null, prescriptionFooter: String(formData.get("prescriptionFooter") ?? "").trim() || null }, create: { id: "default", name, address: String(formData.get("address") ?? "").trim() || null, phone: String(formData.get("phone") ?? "").trim() || null, email: String(formData.get("email") ?? "").trim() || null, prescriptionFooter: String(formData.get("prescriptionFooter") ?? "").trim() || null } });
+  await audit(user.id, "UPDATE", "ClinicSettings", settings.id); revalidatePath("/settings");
 }
